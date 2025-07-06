@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Robot Battle</title>
+    <style>
+        body {
+            font-family: sans-serif;
+       }
+        .main-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            width: 100%;
+        }
+        canvas {
+            border: 1px solid black;
+            display: block;
+            margin: 10px auto;
+            background: #f0f0f0;
+        }
+        .modal {
+            text-align: center;
+            display: none; /* Hidden by default */
+            position: fixed; /* Stay in place */
+            z-index: 1; /* Sit on top */
+            padding-top: 100px; /* Location of the box */
+            left: 0;
+            top: 0;
+            width: 100%; /* Full width */
+            height: 100%; /* Full height */
+            overflow: auto; /* Enable scroll if needed */
+            background-color: rgb(0,0,0); /* Fallback color */
+            background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+        }
+        .modal-content {
+            margin: auto;
+            border: 2px solid #888;
+            width: 600px;
+        }    
+        .modal-title {
+            padding: 5px;
+            text-align: center;
+            font-size: 40px;
+            background-color: #000000;
+            color: #ffffff;
+        }    
+        .modal-body {
+            font-size: 16px;
+            background-color: #fefefe;
+            padding: 20px;
+        }
+        .hint {
+            text-align: center;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        button {
+            font-size: 20px;
+            margin-top: 20px;
+        }
+        .radio-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 4px auto;
+            width: 100px;
+        }
+        .avatar-container {
+            text-align: center;
+            margin: 20px auto;
+            font-size: 20px;
+        }
+        .avatar {
+            margin-top: 10px;
+            background-size: cover;
+            height: 30px;
+            width: 30px;
+            margin: auto;
+        }
+        #player-2-avatar {
+            background-image: url("robot_green.png");
+        }
+        #player-1-avatar {
+            background-image: url("robot_purple.png");
+        }
+        table {
+            width: 200px;
+            text-align: center;
+        }
+		.player-container input {
+			text-align: center;
+			font-weight: bold;
+			font-size: 20px;
+			border: none;
+		}
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <div class="player-container" style="display: none">
+            <div class="avatar-container">
+                <div><input type="text" id="player-1-name" value="Player 1" /></div>
+                <div id="player-1-avatar" class="avatar"></div>
+            </div>
+            <table>
+                <tr>
+                    <th>Robot 1</th>
+                    <th class="robot-2-column">Robot 2</th>
+                </tr>
+                <tr>
+                    <td>❤️&nbsp<span id="player-1-robot-1-lives"></span></th>
+                    <td class="robot-2-column">❤️&nbsp<span id="player-1-robot-2-lives"></span></th>
+                </tr>
+                <tr>
+                    <td>💣&nbsp<span id="player-1-robot-1-grenades"></span></th>
+                    <td class="robot-2-column">💣&nbsp<span id="player-1-robot-2-grenades"></span></th>
+                </tr>
+                <tr>
+                    <td>🛡️&nbsp<span id="player-1-robot-1-shields"></span></th>
+                    <td class="robot-2-column">🛡️&nbsp<span id="player-1-robot-2-shields"></span></th>
+                </tr>
+            </table>
+        </div>
+        <div>
+            <canvas id="gameCanvas"></canvas>
+            <div class="hint">
+                <span id="moveHint" style="display: none">The selected robot is highlighted in blue.<br/>It can move up to 3 squares in a turn.</span>
+                <span id="grenadeHint" style="display: none">A Grenade can target any square in the game but each robot only has 2 per game.</span>
+                <span id="laserHint" style="display: none">A laser can only shoot 3 squares from where the robot moves.</span>
+                <span id="shieldHint" style="display: none">A Shield will bounce back any direct hit but each robot only has 2 per game.</span>
+            </div>
+        </div>
+        <div class="player-container" style="display: none">
+            <div class="avatar-container">
+                <div><input type="text" id="player-2-name" value="Player 2" /></div>
+                <div id="player-2-avatar" class="avatar"></div>
+            </div>
+            <table>
+                <tr>
+                    <th>Robot 1</th>
+                    <th class="robot-2-column">Robot 2</th>
+                </tr>
+                <tr>
+                    <td>❤️&nbsp<span id="player-2-robot-1-lives"></span></th>
+                    <td class="robot-2-column">❤️&nbsp<span id="player-2-robot-2-lives"></span></th>
+                </tr>
+                <tr>
+                    <td>💣&nbsp<span id="player-2-robot-1-grenades"></span></th>
+                    <td class="robot-2-column">💣&nbsp<span id="player-2-robot-2-grenades"></span></th>
+                </tr>
+                <tr>
+                    <td>🛡️&nbsp<span id="player-2-robot-1-shields"></span></th>
+                    <td class="robot-2-column">🛡️&nbsp<span id="player-2-robot-2-shields"></span></th>
+                </tr>
+            </table>
+        </div>
+    </div>
+    <div id="dialog" class="modal">
+      <div class="modal-content">
+        <div id="dialogTitle" class="modal-title"></div>
+        <div id="dialogBody" class="modal-body">
+            <div id="startScreen">
+                <p>Welcome to robot battle!</p>
+                <p>This is a 2 player game where each player takes turns.</p>
+                <p>All robots start with 2 grenades and a lazer with infinite shots.<br/>
+                Each player must move and attack where they think the other player will be.<br/>
+                When each player has completed their turn the battle will begin.
+                </p>
+                <p><strong>Remember, don't watch each other take your turn or it will ruin the fun!</strong></p>
+                <div>
+                    <label>Robots per player:
+                        <select id="robotCount">
+                            <option value="1" selected>1</option>
+                            <option value="2">2</option>
+                        </select>
+                    </label>
+                </div>
+                <button id="startButton" onclick="startGame()">Start Game</button>
+            </div>
+            <div id="weaponControls" style="display:none;">
+                <div id="weaponSelect" style="display: none;">
+                    <div class="radio-option">
+                        <input type="radio" name="weaponSelect" id="laserRadio" value="laser" checked>
+                        <label for="laserRadio">Laser</label>
+                    </div>
+                    <div class="radio-option">
+                        <input type="radio" name="weaponSelect" id="grenadeRadio" value="grenade">
+                        <label for="grenadeRadio">Grenade</label>
+                    </div>
+                    <div class="radio-option">
+                        <input type="radio" name="weaponSelect" id="shieldRadio" value="shield">
+                        <label for="shieldRadio">Shield</label>
+                    </div>
+                </div>
+                <button onclick="confirmWeapon()">Continue</button>
+            </div>
+            <button id="animateBtn" onclick="animateAll()" style="display:none;">Animate</button>
+        </div>
+      </div>
+    </div>
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const modal = document.getElementById("dialog");
+const dialogTitle = document.getElementById("dialogTitle");
+const TILE_SIZE = 60;
+const ROWS = 5;
+const COLS = 5;
+canvas.width = COLS * TILE_SIZE;
+canvas.height = ROWS * TILE_SIZE;
+const robot_images = [];
+
+const robotImages = {1: createImage('robot_purple.png'), 2: createImage('robot_green.png') };
+
+let gameState = {
+    players: {
+        1: {},
+        2: {}
+    },
+    turn: 1,
+    selectedRobot: null,
+    phase: 'setup',
+    targeting: { x: 0, y: 0 },
+    animating: false,
+    attackQueue: [],
+    hitIndicators: [],
+    screenShake: { active: false, intensity: 0, duration: 0, offsetX: 0, offsetY: 0 }
+};
+
+dialogTitle.innerHTML = 'Robot Battle';
+modal.style.display = 'block';
+
+class Robot {
+    constructor(x, y, player, robot) {
+        this.x = x;
+        this.y = y;
+        this.targetX = x;
+        this.targetY = y;
+        this.player = player;
+        this.robot = robot;
+        this.lives = 2;
+        this.grenades = 2;
+        this.shields = 2;
+        this.attack = null;
+        this.drawX = x;
+        this.drawY = y;
+        
+        gameState.players[player][robot] = this;
+        this.updateStatusTable();
+    }
+    
+    remove() {
+        delete gameState.players[this.player][this.robot];
+    }
+
+    draw() {
+        const currentTurn = !gameState.animating && gameState.players[gameState.turn][gameState.selectedRobot] === this;
+        // If in planning mode show where the user has planned the move to otherwise show the actual position
+        const currentX = currentTurn ? this.targetX : this.drawX;
+        const currentY = currentTurn ? this.targetY : this.drawY;
+
+
+        // Highlight current robot
+        if (currentTurn && gameState.phase === 'move') {
+            ctx.fillStyle = 'rgba(0,255,255,0.75)';
+            ctx.fillRect(
+                currentX * TILE_SIZE + 2,
+                currentY * TILE_SIZE + 2,
+                TILE_SIZE - 4,
+                TILE_SIZE - 4
+            );
+        }
+        // Draw the robot in normal mode or a shield if animating the attacks with a shield
+        if (gameState.animating && this.attack.type === 'shield') {
+            ctx.font = '50px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = 'black'; //
+            ctx.fillText('🛡️', currentX * TILE_SIZE + (TILE_SIZE / 2), currentY * TILE_SIZE + (TILE_SIZE / 2) + 3);
+
+        } else {
+            ctx.drawImage(robotImages[this.player], currentX * TILE_SIZE + 5, currentY * TILE_SIZE + 5);
+        }
+    }
+
+    animateMovement() {
+        // Move drawX/drawY towards targetX/targetY smoothly
+        const speed = 0.015625; // smaller = slower
+        this.drawX += (this.targetX - this.drawX) * speed;
+        this.drawY += (this.targetY - this.drawY) * speed;
+        if (Math.abs(this.drawX - this.targetX) < 0.01) this.drawX = this.targetX;
+        if (Math.abs(this.drawY - this.targetY) < 0.01) this.drawY = this.targetY;
+    }
+    
+    updateStatusTable() {
+        document.getElementById(`player-${this.player}-robot-${this.robot}-lives`).innerHTML = this.lives;
+        document.getElementById(`player-${this.player}-robot-${this.robot}-grenades`).innerHTML = this.grenades;
+        document.getElementById(`player-${this.player}-robot-${this.robot}-shields`).innerHTML = this.shields;
+    }
+}
+
+function createImage(src) {
+    const image = new Image();
+    image.src = src;
+    return image;
+}
+
+function startGame() {
+    modal.style.display = "none";
+    document.getElementById("moveHint").style.display = 'block';
+    document.getElementById('startScreen').style.display = 'none';
+    canvas.focus();
+    const numRobots = parseInt(document.getElementById('robotCount').value);
+    new Robot(0, 0, 1, 1);
+    new Robot(COLS - 1, ROWS - 1, 2, 1);
+    if (numRobots > 1) {
+        new Robot(0, ROWS - 1, 1, 2);
+        new Robot(COLS - 1, 0, 2, 2);
+    } else {
+        document.querySelectorAll('.robot-2-column').forEach(col => {
+          col.style.display = 'none';
+        });
+    }
+    gameState.turn = 1;
+    gameState.phase = 'move';
+    gameState.selectedRobot = 1;
+    gameState.attackQueue = [];
+    gameState.hitIndicators = [];
+    gameState.screenShake = { active: false, intensity: 0, duration: 0, offsetX: 0, offsetY: 0 };
+    document.getElementById('weaponSelect').style.display = 'none';
+    document.getElementById('weaponControls').style.display = 'none';
+    document.getElementById('animateBtn').style.display = 'none';
+    document.querySelectorAll('.player-container').forEach(col => {
+      col.style.display = 'inline';
+    });
+
+    drawAll();
+}
+
+function confirmMove() {
+    dialogTitle.innerHTML = 'Select Attack';
+    modal.style.display = "inline";
+    document.getElementById('weaponControls').style.display = 'inline';
+    document.getElementById("moveHint").style.display = 'none';
+	const weaponSelect = document.getElementById('weaponSelect');
+    weaponSelect.style.display = 'inline';
+    focusWeapon();
+    const current = gameState.players[gameState.turn][gameState.selectedRobot];
+    gameState.phase = 'weapon';
+    // Select laser to not identify what was previously selected
+    document.querySelector('input[name="weaponSelect"][value="laser"]').checked = true;
+	// Disable or enable grenade and shield
+    document.querySelector('input[name="weaponSelect"][value="grenade"]').disabled = current.grenades == 0;
+    document.querySelector('input[name="weaponSelect"][value="shield"]').disabled = current.shields == 0;
+}
+
+function confirmWeapon() {
+    modal.style.display = "block";
+    gameState.phase = 'target';
+    modal.style.display = 'none';
+    const r = gameState.players[gameState.turn][gameState.selectedRobot];
+    gameState.targeting = { x: r.targetX, y: r.targetY };
+    document.getElementById('weaponSelect').style.display = 'none';
+    document.getElementById('weaponControls').style.display = 'none';
+    document.getElementById(getWeapon() + 'Hint').style.display = 'block';
+    drawAll();
+    if (getWeapon() === 'shield') {
+        // Shield doesn't select a target
+        confirmTargeting();
+    }
+}
+
+function getWeapon() {
+    return document.querySelector('input[name="weaponSelect"]:checked').value;
+}
+
+function focusWeapon() {
+    return document.querySelector('input[name="weaponSelect"]:checked').focus();
+}
+
+function confirmTargeting() {
+    const weapon = getWeapon();
+    document.getElementById(getWeapon() + 'Hint').style.display = 'none';
+    const r = gameState.players[gameState.turn][gameState.selectedRobot];
+    if (weapon !== 'shield' && gameState.targeting.x === r.targetX && gameState.targeting.y === r.targetY) {
+		// Dont allow you to accidentally shoot yourself
+		r.attack = null;
+		alert('Please select a target');
+		return;
+	} else {
+		r.attack = {
+			type: weapon,
+			target: { x: gameState.targeting.x, y: gameState.targeting.y }
+		};
+	}
+    gameState.phase = 'move';
+    nextSelectedRobot();
+    if (gameState.selectedRobot == null) {
+        // Both players finished turn
+        if (gameState.turn === 2) {
+            gameState.phase = 'planningComplete';
+            dialogTitle.innerHTML = 'Both players ready?';
+            modal.style.display = "inline";
+            document.getElementById('animateBtn').style.display = 'inline';
+            gameState.turn = 1; // reset turn to player 1 after animation
+        } else {
+            gameState.turn = 2;
+        }
+        nextSelectedRobot();
+    }
+    drawAll();
+}
+
+function nextSelectedRobot() {
+    const robotKeys = [];
+    Object.keys(gameState.players[gameState.turn]).forEach(key => {
+        robotKeys.push(parseInt(key));
+    });
+    robotKeys.sort();
+    if (gameState.selectedRobot == null) {
+        gameState.selectedRobot = robotKeys[0];
+    } else {
+        while(true) {
+            gameState.selectedRobot++;
+            const lastKey = robotKeys[robotKeys.length - 1];
+            if (gameState.selectedRobot > lastKey) {
+                gameState.selectedRobot = null;
+                return;
+            }
+            if (gameState.players[gameState.turn][gameState.selectedRobot] != null) {
+                return;
+            }
+        }
+    }
+}
+
+document.addEventListener('keydown', (e) => {
+    if (gameState.animating) return; // Ignore input during animations
+
+    if (e.key === 'Enter') {
+        if (gameState.phase === 'setup') {
+            startGame();
+            return;
+        } else if (gameState.phase === 'move') {
+            confirmMove();
+            return;
+        } else if (gameState.phase === 'weapon') {
+            confirmWeapon();
+            return;
+        } else if (gameState.phase === 'target') {
+            confirmTargeting();
+            return;
+        } else if (gameState.phase === 'planningComplete') {
+            animateAll();
+            return;
+        }
+    }
+
+    const r = gameState.players[gameState.turn][gameState.selectedRobot];
+    if (!r) return;
+
+    if (gameState.phase === 'move') {
+        let nx = r.targetX;
+        let ny = r.targetY;
+        if (e.key === 'ArrowUp') ny--;
+        else if (e.key === 'ArrowDown') ny++;
+        else if (e.key === 'ArrowLeft') nx--;
+        else if (e.key === 'ArrowRight') nx++;
+
+        const dist = Math.abs(nx - r.x) + Math.abs(ny - r.y);
+        if (nx >= 0 && nx < COLS && ny >= 0 && ny < ROWS && dist <= 3) {
+            r.targetX = nx;
+            r.targetY = ny;
+        }
+        drawAll();
+    } else if (gameState.phase === 'target') {
+        let tx = gameState.targeting.x;
+        let ty = gameState.targeting.y;
+        if (e.key === 'ArrowUp') ty--;
+        else if (e.key === 'ArrowDown') ty++;
+        else if (e.key === 'ArrowLeft') tx--;
+        else if (e.key === 'ArrowRight') tx++;
+
+        const weapon = getWeapon();
+        const dist = Math.abs(tx - r.targetX) + Math.abs(ty - r.targetY);
+
+        if (
+            tx >= 0 && tx < COLS && ty >= 0 && ty < ROWS &&
+            (weapon === 'grenade' || dist <= 3)
+        ) {
+            gameState.targeting.x = tx;
+            gameState.targeting.y = ty;
+        }
+        drawAll();
+    }
+});
+
+// Draw grid
+function drawGrid() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (gameState.screenShake.active) {
+        ctx.translate(gameState.screenShake.offsetX, gameState.screenShake.offsetY);
+    }
+    ctx.strokeStyle = 'gray';
+    for (let i = 0; i <= ROWS; i++) {
+        ctx.beginPath();
+        ctx.moveTo(0, i * TILE_SIZE);
+        ctx.lineTo(canvas.width, i * TILE_SIZE);
+        ctx.stroke();
+    }
+    for (let j = 0; j <= COLS; j++) {
+        ctx.beginPath();
+        ctx.moveTo(j * TILE_SIZE, 0);
+        ctx.lineTo(j * TILE_SIZE, canvas.height);
+        ctx.stroke();
+    }
+}
+
+// Draw everything
+function drawAll() {
+    ctx.setTransform(1,0,0,1,0,0); // Reset transform for shake
+    drawGrid();
+
+    // Draw robots
+    Object.values(gameState.players[1]).forEach(r => r.draw());
+    Object.values(gameState.players[2]).forEach(r => r.draw());
+
+    // Draw targeting reticle
+    if (gameState.phase === 'target') {
+        ctx.strokeStyle = 'red';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(
+            gameState.targeting.x * TILE_SIZE + 5,
+            gameState.targeting.y * TILE_SIZE + 5,
+            TILE_SIZE - 10,
+            TILE_SIZE - 10
+        );
+    }
+
+    // Draw hit indicators (red pulses)
+    gameState.hitIndicators = gameState.hitIndicators.filter(ind => {
+        ind.alpha -= 0.01;
+        if (ind.alpha <= 0) {
+            return false;
+        }
+        ctx.fillStyle = `rgba(255,0,0,${ind.alpha})`;
+        ctx.fillRect(ind.x * TILE_SIZE, ind.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        return true;
+    });
+}
+
+// Animate all robot movements and then attacks
+function animateAll() {
+    modal.style.display = 'none';
+    if (gameState.animating) return;
+    gameState.animating = true;
+    document.getElementById('animateBtn').style.display = 'none';
+
+    let allArrived = false;
+    function animateMovementStep() {
+        allArrived = true;
+        [...Object.values(gameState.players[1]), ...Object.values(gameState.players[2])].forEach(r => {
+            r.animateMovement();
+            if (r.drawX !== r.targetX || r.drawY !== r.targetY) allArrived = false;
+        });
+        drawAll();
+        if (!allArrived) {
+            requestAnimationFrame(animateMovementStep);
+        } else {
+            // After movement, run attacks in random order
+            runAttacksRandomOrder();
+        }
+    }
+    animateMovementStep();
+}
+
+// Run attacks randomly and animate
+function runAttacksRandomOrder() {
+    // Prepare queue of all attacks (both players' robots)
+    gameState.attackQueue = [];
+    for (const p of [1, 2]) {
+        for (const r of Object.values(gameState.players[p])) {
+            if (r.attack) {
+                gameState.attackQueue.push(r);
+            }
+        }
+    }
+    // Randomize
+    gameState.attackQueue.sort(() => Math.random() - 0.5);
+
+    function nextAttack() {
+        if (gameState.attackQueue.length === 0) {
+            // All attacks done, clear attacks and check for game end
+            for (const p of [1, 2]) {
+                for (const r of Object.values(gameState.players[p])) {
+                    r.attack = null;
+                    // Reset current positions to target positions
+                    r.x = r.targetX;
+                    r.y = r.targetY;
+                    r.drawX = r.x;
+                    r.drawY = r.y;
+                }
+            }
+            gameState.animating = false;
+            roundComplete();
+            return;
+        }
+
+        const attacker = gameState.attackQueue.pop();
+        animateAttack(attacker, () => {
+            nextAttack();
+        });
+    }
+    nextAttack();
+}
+
+function animateAttack(robot, callback) {
+    if (!robot.attack) {
+        callback();
+        return;
+    }
+    const fromX = robot.drawX * TILE_SIZE + TILE_SIZE / 2;
+    const fromY = robot.drawY * TILE_SIZE + (TILE_SIZE / 2) + 12;
+    const toX = robot.attack.target.x * TILE_SIZE + TILE_SIZE / 2;
+    const toY = robot.attack.target.y * TILE_SIZE + TILE_SIZE / 2;
+
+    if (robot.attack.type === 'laser') {
+        animateLaser(fromX, fromY, toX, toY, robot, () => {
+            applyDamage(robot.attack.target.x, robot.attack.target.y, callback);
+        });
+    } else if (robot.attack.type === 'grenade') {
+		robot.grenades--;
+        robot.updateStatusTable();
+        animateGrenade(fromX, fromY, toX, toY, robot, () => {
+            applyDamage(robot.attack.target.x, robot.attack.target.y, callback);
+        });
+    } else if (robot.attack.type === 'shield') {
+		robot.shields--;
+        robot.updateStatusTable();
+        callback();
+    }
+}
+
+function animateLaser(x1, y1, x2, y2, robot, cb) {
+    const duration = 120; // frames (~2 sec at 60fps)
+    let frame = 0;
+
+    let hitShield = false;
+    if (robot != null) {
+        for (const r of getRobotsAtCoordinates(robot.attack.target.x, robot.attack.target.y)) {
+            if (r != robot && r.attack.type === 'shield') {
+                hitShield = true;
+                break;
+            }
+        }
+    }
+
+    function step() {
+        drawAll();
+
+        // Draw laser beam line
+        ctx.strokeStyle = 'rgba(255,0,0,0.8)';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        const progress = frame / duration;
+        ctx.lineTo(x1 + (x2 - x1) * progress, y1 + (y2 - y1) * progress);
+        ctx.stroke();
+
+        frame++;
+        if (frame <= duration) {
+            requestAnimationFrame(step);
+        } else {
+            if (hitShield) {
+                animateLaser(x2, y2, x1, y1, null, cb)
+                // Attribure the attack to their current location
+                robot.attack.target.x = robot.drawX;
+                robot.attack.target.y = robot.drawY;
+            } else {
+                cb();
+            }
+        }
+    }
+    step();
+}
+
+function animateGrenade(x1, y1, x2, y2, robot, cb) {
+    const travelDuration = 120;
+    const explosionDuration = 120;
+    let frame = 0;
+    
+    let hitShield = false;
+    if (robot != null) {
+        for (const r of getRobotsAtCoordinates(robot.attack.target.x, robot.attack.target.y)) {
+            if (r != robot && r.attack.type === 'shield') {
+                hitShield = true;
+                break;
+            }
+        }
+    }
+
+    function step() {
+        drawAll();
+
+        if (frame <= travelDuration) {
+            const progress = frame / travelDuration;
+            const cx = x1 + (x2 - x1) * progress;
+            const cy = y1 + (y2 - y1) * progress;
+
+            // Calculate rotation angle
+            const angle = progress * 4 * Math.PI; // 2 rotations
+
+            // Draw rotating bomb emoji
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate(angle);
+            ctx.font = '24px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = 'black'; //
+            ctx.fillText('💣', 0, 0);
+            ctx.restore();
+        } else if (frame <= travelDuration + explosionDuration) {
+        
+            if (hitShield) {
+                animateGrenade(x2, y2, x1, y1, null, cb)
+                // Attribure the attack to their current location
+                robot.attack.target.x = robot.drawX;
+                robot.attack.target.y = robot.drawY;
+                return;
+            } 
+        
+            const explosionProgress = (frame - travelDuration) / explosionDuration;
+            const maxRadius = TILE_SIZE * 1.5;
+            const radius = maxRadius * explosionProgress;
+
+            ctx.fillStyle = `rgba(255,165,0,${1 - explosionProgress})`;
+            ctx.beginPath();
+            ctx.arc(x2, y2, radius, 0, 2 * Math.PI);
+            ctx.fill();
+
+            // Screen shake logic
+            if (!gameState.screenShake.active) {
+                gameState.screenShake.active = true;
+                gameState.screenShake.intensity = 8;
+                gameState.screenShake.duration = explosionDuration;
+            }
+
+            gameState.screenShake.offsetX = (Math.random() - 0.5) * gameState.screenShake.intensity;
+            gameState.screenShake.offsetY = (Math.random() - 0.5) * gameState.screenShake.intensity;
+            gameState.screenShake.duration--;
+
+            if (gameState.screenShake.duration <= 0) {
+                gameState.screenShake.active = false;
+                gameState.screenShake.offsetX = 0;
+                gameState.screenShake.offsetY = 0;
+            }
+        } else {
+            cb();
+            return;
+        }
+
+        frame++;
+        requestAnimationFrame(step);
+    }
+    step();
+}
+
+function animateHitIndicator(x, y, cb) {
+     gameState.hitIndicators.push({x: Math.floor(x), y: Math.floor(y), alpha: 1});
+
+    function step() {
+        drawAll();
+        if (gameState.hitIndicators.length > 0) {
+            requestAnimationFrame(step);
+        } else {
+            cb();
+        }
+    }
+    step();
+}
+
+function getRobotsAtCoordinates(tx, ty) {
+    const found = [];
+    for (const p of [1, 2]) {
+        for (const r of Object.values(gameState.players[p])) {
+            if (r.targetX === tx && r.targetY === ty) {
+				found.push(r);
+            }
+        }
+    }
+    return found;
+}
+
+function applyDamage(tx, ty, callback) {
+    const hit = getRobotsAtCoordinates(tx, ty);
+	hit.forEach(r => {
+        r.lives--;
+        r.updateStatusTable();
+    });
+
+	if (hit.length > 0) {
+		animateHitIndicator(tx, ty, callback);
+	} else {
+		callback();
+	}
+}
+
+function roundComplete() {
+    for (const p of [1, 2]) {
+        for (const r of Object.values(gameState.players[p])) {
+            if (r.lives <= 0) {
+                r.remove();
+                drawAll();
+            }
+        }
+    }
+    let p1Dead = Object.keys(gameState.players[1]).length == 0;
+    let p2Dead = Object.keys(gameState.players[2]).length == 0;
+    if (p1Dead || p2Dead) {
+		const player1Name = document.getElementById('player-1-name').value;
+		const player2Name = document.getElementById('player-2-name').value;
+		if (p1Dead && p2Dead) {
+			alert(`Game over, its a draw. Both ${player1Name} and ${player2Name} win!`);
+		} else {
+			const player = p1Dead ? player2Name : player1Name;
+			alert(`Game over, ${player} wins!`);
+		}
+        window.location.reload();
+    } else {
+        gameState.phase = 'move';
+        drawAll();
+    }
+}
+
+function drawGrid() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (gameState.screenShake.active) {
+        ctx.translate(gameState.screenShake.offsetX, gameState.screenShake.offsetY);
+    }
+    ctx.strokeStyle = 'gray';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= ROWS; i++) {
+        ctx.beginPath();
+        ctx.moveTo(0, i * TILE_SIZE);
+        ctx.lineTo(canvas.width, i * TILE_SIZE);
+        ctx.stroke();
+    }
+    for (let j = 0; j <= COLS; j++) {
+        ctx.beginPath();
+        ctx.moveTo(j * TILE_SIZE, 0);
+        ctx.lineTo(j * TILE_SIZE, canvas.height);
+        ctx.stroke();
+    }
+}
+</script>
+</body>
+</html>

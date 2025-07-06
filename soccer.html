@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Robot Soccer</title>
+    <style>
+        canvas {
+            background: green;
+            display: block;
+            margin: 0 auto;
+        }
+        body {
+            text-align: center;
+            font-family: sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <h1>Robot Soccer</h1>
+    <canvas id="gameCanvas" width="900" height="450"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const FIELD_WIDTH = 900;
+        const FIELD_HEIGHT = 450;
+        const GOAL_WIDTH = 10;
+        const GOAL_HEIGHT = 150;
+        const PLAYER_SIZE = 50;
+        const MAX_SCORE = 5;
+
+        const keys = {};
+        const images = {};
+
+        const player1 = {
+            x: 100,
+            y: 200,
+            vx: 0,
+            vy: 0,
+            img: 'robot_green.png',
+            score: 0,
+			index: 0
+        };
+
+        const player2 = {
+            x: 750,
+            y: 200,
+            vx: 0,
+            vy: 0,
+            img: 'robot_purple.png',
+            score: 0,
+			index: 1
+        };
+
+        const ball = {
+            x: FIELD_WIDTH / 2,
+            y: FIELD_HEIGHT / 2,
+            vx: 0,
+            vy: 0,
+            radius: 10
+        };
+
+        const goalkeeperLeft = {
+            x: 0,
+            y: FIELD_HEIGHT / 2 - PLAYER_SIZE / 2,
+            vy: 2,
+            side: 'left'
+        };
+
+        const goalkeeperRight = {
+            x: FIELD_WIDTH - PLAYER_SIZE,
+            y: FIELD_HEIGHT / 2 - PLAYER_SIZE / 2,
+            vy: 2,
+            side: 'right'
+        };
+
+        function loadImages(paths, callback) {
+            let loaded = 0;
+            const total = Object.keys(paths).length;
+            for (let key in paths) {
+                images[key] = new Image();
+                images[key].onload = () => {
+                    if (++loaded === total) callback();
+                };
+                images[key].src = paths[key];
+            }
+        }
+		
+		function getGamepad(index) {
+			if ("getGamepads" in navigator) {
+				const gamepads = navigator.getGamepads();
+				return gamepads.length > index ? gamepads[index] : null;
+			}
+		}
+
+        function drawField() {
+            ctx.fillStyle = 'white';
+            ctx.fillRect(FIELD_WIDTH / 2 - 1, 0, 2, FIELD_HEIGHT);
+            ctx.fillRect(0, FIELD_HEIGHT / 2 - GOAL_HEIGHT / 2, GOAL_WIDTH, GOAL_HEIGHT);
+            ctx.fillRect(FIELD_WIDTH - GOAL_WIDTH, FIELD_HEIGHT / 2 - GOAL_HEIGHT / 2, GOAL_WIDTH, GOAL_HEIGHT);
+        }
+
+        function drawPlayer(player) {
+            ctx.drawImage(images[player.img], player.x, player.y, PLAYER_SIZE, PLAYER_SIZE);
+        }
+
+        function drawBall() {
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            ctx.fillStyle = 'white';
+            ctx.fill();
+        }
+
+        function drawGoalkeeper(gk) {
+            ctx.drawImage(images['goalie'], gk.x, gk.y, PLAYER_SIZE, PLAYER_SIZE);
+        }
+
+        function updatePlayer(player, upKey, downKey, leftKey, rightKey) {
+			let gamepad = player.gamepad;
+			if (!gamepad) {
+				gamepad = getGamepad(player.index);
+				player.gamepad = gamepad;
+			}
+			const up = keys[upKey] || (gamepad && gamepad.axes[1] == -1);
+			const down = keys[downKey] || (gamepad && gamepad.axes[1] == 1);
+			const right = keys[rightKey] || (gamepad && gamepad.axes[0] == 1);
+			const left = keys[leftKey]  || (gamepad && gamepad.axes[0] == -1);
+            const speed = 3;
+            player.vx = right ? speed : left ? -speed : 0;
+            player.vy = down ? speed : up ? -speed : 0;
+
+            player.x += player.vx;
+            player.y += player.vy;
+
+            player.x = Math.max(0, Math.min(FIELD_WIDTH - PLAYER_SIZE, player.x));
+            player.y = Math.max(0, Math.min(FIELD_HEIGHT - PLAYER_SIZE, player.y));
+        }
+
+        function updateBall() {
+            ball.x += ball.vx;
+            ball.y += ball.vy;
+
+            // Friction
+            ball.vx *= 0.99;
+            ball.vy *= 0.99;
+
+            const goalTop = FIELD_HEIGHT / 2 - GOAL_HEIGHT / 2;
+            const goalBottom = FIELD_HEIGHT / 2 + GOAL_HEIGHT / 2;
+            const isInGoalZone = ball.y > goalTop && ball.y < goalBottom;
+
+            // Bounce top/bottom
+            if (ball.y - ball.radius < 0) {
+                ball.y = ball.radius;
+                ball.vy *= -1;
+            }
+            if (ball.y + ball.radius > FIELD_HEIGHT) {
+                ball.y = FIELD_HEIGHT - ball.radius;
+                ball.vy *= -1;
+            }
+
+            // Bounce left wall
+            if (ball.x - ball.radius < 0) {
+                if (!isInGoalZone) {
+                    ball.x = ball.radius;
+                    ball.vx *= -1;
+                } else {
+                    player2.score++;
+                    resetBall();
+                    return;
+                }
+            }
+
+            // Bounce right wall
+            if (ball.x + ball.radius > FIELD_WIDTH) {
+                if (!isInGoalZone) {
+                    ball.x = FIELD_WIDTH - ball.radius;
+                    ball.vx *= -1;
+                } else {
+                    player1.score++;
+                    resetBall();
+                    return;
+                }
+            }
+        }
+
+        function resetBall() {
+            ball.x = FIELD_WIDTH / 2;
+            ball.y = FIELD_HEIGHT / 2;
+            ball.vx = ball.vy = 0;
+        }
+
+        function handlePlayerBallCollision(player) {
+            const dx = (player.x + PLAYER_SIZE / 2) - ball.x;
+            const dy = (player.y + PLAYER_SIZE / 2) - ball.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            if (dist < PLAYER_SIZE / 2 + ball.radius) {
+                const angle = Math.atan2(dy, dx);
+                const speed = Math.sqrt(player.vx ** 2 + player.vy ** 2) * 2;
+                ball.vx = -Math.cos(angle) * speed;
+                ball.vy = -Math.sin(angle) * speed;
+            }
+
+            // Allow kicking off walls
+            const touchingWall = (
+                ball.x - ball.radius <= 0 ||
+                ball.x + ball.radius >= FIELD_WIDTH ||
+                ball.y - ball.radius <= 0 ||
+                ball.y + ball.radius >= FIELD_HEIGHT
+            );
+            if (touchingWall && dist < PLAYER_SIZE / 2 + ball.radius + 5 && (player.vx || player.vy)) {
+                ball.vx = player.vx * 2;
+                ball.vy = player.vy * 2;
+            }
+        }
+
+        function updateGoalkeeper(gk) {
+            gk.y += gk.vy;
+
+            const minY = FIELD_HEIGHT / 2 - GOAL_HEIGHT / 2;
+            const maxY = FIELD_HEIGHT / 2 + GOAL_HEIGHT / 2 - PLAYER_SIZE;
+
+            if (gk.y < minY || gk.y > maxY) {
+                gk.vy *= -1;
+                gk.y += gk.vy;
+            }
+
+            // Bounce ball
+            const dx = (gk.x + PLAYER_SIZE / 2) - ball.x;
+            const dy = (gk.y + PLAYER_SIZE / 2) - ball.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < PLAYER_SIZE / 2 + ball.radius) {
+                const angle = Math.atan2(dy, dx);
+                ball.vx = -Math.cos(angle) * 4;
+                ball.vy = -Math.sin(angle) * 4;
+            }
+
+            // Push players
+            [player1, player2].forEach(player => {
+                const px = player.x + PLAYER_SIZE / 2;
+                const py = player.y + PLAYER_SIZE / 2;
+                const gx = gk.x + PLAYER_SIZE / 2;
+                const gy = gk.y + PLAYER_SIZE / 2;
+                const d = Math.sqrt((px - gx) ** 2 + (py - gy) ** 2);
+                if (d < PLAYER_SIZE) {
+                    const angle = Math.atan2(py - gy, px - gx);
+                    const pushForce = 2;
+                    player.x += Math.cos(angle) * pushForce;
+                    player.y += Math.sin(angle) * pushForce;
+
+                    // Clamp
+                    player.x = Math.max(0, Math.min(FIELD_WIDTH - PLAYER_SIZE, player.x));
+                    player.y = Math.max(0, Math.min(FIELD_HEIGHT - PLAYER_SIZE, player.y));
+                }
+            });
+        }
+
+        function drawScore() {
+            ctx.fillStyle = 'white';
+            ctx.font = '20px Arial';
+            ctx.fillText(`Green: ${player1.score}`, 20, 30);
+            ctx.fillText(`Purple: ${player2.score}`, FIELD_WIDTH - 140, 30);
+        }
+
+        function checkWinner() {
+            if (player1.score >= MAX_SCORE) return 'Green Wins!';
+            if (player2.score >= MAX_SCORE) return 'Purple Wins!';
+            return null;
+        }
+
+        function gameLoop() {
+            ctx.clearRect(0, 0, FIELD_WIDTH, FIELD_HEIGHT);
+            drawField();
+
+            updatePlayer(player1, 'KeyW', 'KeyS', 'KeyA', 'KeyD');
+            updatePlayer(player2, 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight');
+
+            updateGoalkeeper(goalkeeperLeft);
+            updateGoalkeeper(goalkeeperRight);
+            updateBall();
+
+            handlePlayerBallCollision(player1);
+            handlePlayerBallCollision(player2);
+
+            drawPlayer(player1);
+            drawPlayer(player2);
+            drawGoalkeeper(goalkeeperLeft);
+            drawGoalkeeper(goalkeeperRight);
+            drawBall();
+            drawScore();
+
+            const winner = checkWinner();
+            if (winner) {
+                ctx.fillStyle = 'yellow';
+                ctx.font = '40px Arial';
+                ctx.fillText(winner, FIELD_WIDTH / 2 - 120, FIELD_HEIGHT / 2);
+                return;
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        document.addEventListener('keydown', (e) => keys[e.code] = true);
+        document.addEventListener('keyup', (e) => keys[e.code] = false);
+
+        loadImages({
+            'robot_green.png': 'robot_green.png',
+            'robot_purple.png': 'robot_purple.png',
+            'goalie': 'robot.png'
+        }, () => {
+		    player1.gamepad = getGamepad(0);
+		    player2.gamepad = getGamepad(1);
+            gameLoop();
+        });
+    </script>
+</body>
+</html>

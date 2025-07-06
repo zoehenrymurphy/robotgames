@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Robot Obstacle Course</title>
+        <style>
+            body {
+                background: #222;
+                color: white;
+                font-family: sans-serif;
+                margin: 0;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+            }
+            h1, p {
+                margin: 10px 0;
+            }
+            #game-container {
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: center;
+                width: 100%;
+            }
+            #game-grid {
+                display: grid;
+                grid-template-rows: repeat(9, 60px);
+                grid-template-columns: repeat(18, 60px);
+                gap: 0;
+                margin: 20px;
+                border: 2px solid black;
+                background: #000;
+            }
+            .cell {
+                width: 60px;
+                height: 60px;
+                background: #ccc;
+                border: 1px solid #000;
+                position: relative;
+            }
+            .block {
+                position: absolute;
+                width: 100%;
+                height: 100%;
+                background-size: contain;
+                background-repeat: no-repeat;
+                background-position: center;
+            }
+            .queued-path {
+                border: 3px solid orange;
+                box-sizing: border-box;
+            }
+            #status {
+                margin-top: 10px;
+            }
+            #controls {
+                display: grid;
+                grid-template-columns: repeat(3, 60px);
+                gap: 10px;
+                justify-items: center;
+                align-items: center;
+                margin: auto;
+                height: 200px;
+            }
+            .touch-btn {
+                width: 60px;
+                height: 60px;
+                font-size: 24px;
+                background: #444;
+                color: white;
+                border: none;
+                border-radius: 6px;
+            }
+            #overlay {
+                display: none;
+                position: fixed;
+                z-index: 9999;
+                top: 0;
+                left: 0;
+                height: 100%;
+                width: 100%;
+                background-color: rgba(0, 0, 0, 0.4);
+                backdrop-filter: blur(3px);
+                justify-content: center;
+                align-items: center;
+                flex-direction: column;
+            }
+            #overlay.visible {
+                display: flex;
+            }
+            .spinner {
+                width: 64px;
+                height: 64px;
+                border: 8px solid #f3f3f3;
+                border-top: 8px solid #3498db;
+                border-radius: 50%;
+                animation: spin 1s linear infinite;
+            }
+            .loading-text {
+                margin-top: 12px;
+                color: #fff;
+                font-size: 1.2rem;
+                font-family: sans-serif;
+            }
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Robot Obstacle Course</h1>
+        <p>Use the buttons or arrow keys to move. Press "T" for training mode</p>
+        <div id="status"></div>
+        <div id="game-container">
+            <div id="game-grid"></div>
+            <div id="controls">
+                <div></div>
+                <button class="touch-btn" onclick="queueMove('up')">▲</button>
+                <div></div>
+                <button class="touch-btn" onclick="queueMove('left')">◄</button>
+                <button class="touch-btn" onclick="moveStep()">Go</button>
+                <button class="touch-btn" onclick="queueMove('right')">►</button>
+                <div></div>
+                <button class="touch-btn" onclick="queueMove('down')">▼</button>
+                <div></div>
+            </div>
+        </div>
+        <p id="queued-path"></p>
+        <div id="overlay">
+            <div class="spinner"></div>
+            <p class="loading-text">Solving...</p>
+        </div>
+        <script>
+            //const ROWS = window.innerWidth < window.innerHeight ? 18 : 9;
+            //const COLS = window.innerWidth < window.innerHeight ? 9 : 18;
+            const ROWS = 9;
+            const COLS = 18;
+            const gridElement = document.getElementById('game-grid');
+            const statusElement = document.getElementById('status');
+            const pathDisplay = document.getElementById('queued-path');
+            let pathfindingWorker = null;
+
+            const images = {
+                robot: 'robot.png',
+                penguin: 'penguin.png',
+                key: 'key.png',
+                door: 'door.png',
+                hammer: 'hammer.png',
+                obstacle: Array.from({length: 9}, (_, i) => `obstacle_${i+1}.png`)
+            };
+
+            const keyMap = {
+                ArrowUp: 'up',
+                ArrowDown: 'down',
+                ArrowLeft: 'left',
+                ArrowRight: 'right'
+            };
+            
+            const directions = {
+                up: [-1, 0],
+                down: [1, 0],
+                left: [0, -1],
+                right: [0, 1]
+            };
+
+            let grid = [];
+            let path = [];
+            let pathDirs = [];
+            let robotPos = {row: 0, col: 0};
+            let keysCollected = 0;
+            let totalKeys = 1;
+            let hammersCollected = 0;
+            let level = 1;
+            let totalTurns = 0;
+            let levelTurns = 0;
+            let isMoving = false;
+            let isSolving = false;
+            let trainingMode = false;
+            let fastMode = false;
+            let useWalls = true;
+            let robotImage = images.robot;
+
+            function createGrid() {
+                const availablePositions = [];
+                gridElement.innerHTML = '';
+                grid = Array.from({length: ROWS}, (_, r) =>
+                    Array.from({length: COLS}, (_, c) => {
+                        const cell = document.createElement('div');
+                        cell.className = 'cell';
+                        cell.dataset.row = r;
+                        cell.dataset.col = c;
+                        gridElement.appendChild(cell);
+                        // Track the positions that can be allocated, leave the top row and first column free to move around
+                        if (r > 0 && c > 0) {
+                            availablePositions.push({
+                                row: r,
+                                col: c
+                            });
+                        }
+                        return {
+                            cell: cell,
+                            block: null
+                        };
+                    })
+                );
+                return availablePositions;
+            }
+
+            function shuffle(array) {
+                for (let i = array.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1)); // random index from 0 to i
+                    [array[i], array[j]] = [array[j], array[i]];
+                }
+            }
+
+            function placeBlock(type, imageList, availablePositions) {
+                const position = availablePositions.pop();
+                if (position) {
+                    const { row, col } = position;
+                    const block = document.createElement('div');
+                    block.className = 'block';
+                    block.style.backgroundImage = `url('${Array.isArray(imageList) ? imageList[Math.floor(Math.random() * imageList.length)] : imageList}')`;
+                    block.dataset.type = type;
+                    grid[row][col].block = block;
+                    grid[row][col].cell.appendChild(block);
+                }
+            }
+
+            function initLevel() {
+                isMoving = false;
+                availablePositions = createGrid();
+                shuffle(availablePositions);
+                robotPos = {
+                    row: 0,
+                    col: 0
+                };
+                path = [];
+                pathDirs = [];
+                levelTurns = 0;
+                keysCollected = 0;
+                totalKeys = level;
+                hammersCollected = 0;
+                robotImage = (Math.floor(Math.random() * 10) === 0) ? images.penguin : images.robot;
+                updateDisplay();
+
+                for (let i = 0; i < level; i++) {
+                    placeBlock('key', images.key, availablePositions);
+                }
+                placeBlock('door', images.door, availablePositions);
+                for (let i = 0; i < Math.floor(level / 2); i++) {
+                    placeBlock('hammer', images.hammer, availablePositions);
+                }
+                for (let i = 0; i < 10 + level; i++) {
+                    placeBlock('obstacle', images.obstacle, availablePositions);
+                }
+                updateRobot();
+            }
+
+            function updateDisplay() {
+                statusElement.textContent = `Level ${level} - Keys: ${keysCollected}/${totalKeys} - Hammers: ${hammersCollected} - Turns: ${levelTurns} (Total: ${totalTurns}) ${trainingMode ? '- Training' : ''} ${fastMode ? '- Fast' : ''} ${!useWalls ? '- No Walls' : ''}`;
+                pathDisplay.textContent = `Queued: ${pathDirs.join(' → ')}`;
+            }
+
+            function updateRobot() {
+                // Reset styles
+                grid.flat().forEach(cell => {
+                    cell.cell.classList.remove('queued-path');
+                    cell.cell.style.backgroundImage = '';
+                });
+                // Draw the robot and the path
+                grid[robotPos.row][robotPos.col].cell.style.backgroundImage = `url('${robotImage}')`;
+                if (trainingMode) {
+                    path.forEach(p => grid[p.row][p.col].cell.classList.add('queued-path'));
+                } 
+            }
+
+            function queueMove(dir) {
+                const delta = directions[dir];
+                const last = path.length ? path[path.length - 1] : robotPos;
+                let r = last.row + delta[0];
+                let c = last.col + delta[1];
+                if (!useWalls) {
+                    if (r < 0) r = ROWS - 1;
+                    if (r >= ROWS) r = 0;
+                    if (c < 0) c = COLS - 1;
+                    if (c >= COLS) c = 0;
+                }
+                if (r < 0 || r >= ROWS || c < 0 || c >= COLS) {
+                    return
+                };
+                path.push({
+                    row: r,
+                    col: c
+                });
+                pathDirs.push(dir);
+                updateDisplay();
+                updateRobot();
+            }
+
+            function moveStep() {
+                if (path.length === 0) {
+                    isMoving = false;
+                    return;
+                }
+                const {row, col} = path.shift();
+                pathDirs.shift();
+                const cell = grid[row][col];
+                const block = cell.block;
+
+                if (block) {
+                    const type = block.dataset.type;
+                    if (type === 'key') {
+                        keysCollected++;
+                        cell.cell.removeChild(block);
+                    } else if (type === 'hammer') {
+                        hammersCollected++;
+                        cell.cell.removeChild(block);
+                    } else if (type === 'obstacle') {
+                        if (hammersCollected > 0) {
+                            hammersCollected--;
+                            cell.cell.removeChild(block);
+                        } else {
+                            alert('Blocked!');
+                            path = [];
+                            pathDirs = [];
+                            updateDisplay();
+                            isMoving = false;
+                            return;
+                        }
+                    } else if (type === 'door') {
+                        if (keysCollected >= totalKeys) {
+                            alert('Level complete!');
+                            totalTurns += levelTurns;
+                            level++;
+                            initLevel();
+                            return;
+                        } else {
+                            alert('Collect all keys first!');
+                            path = [];
+                            pathDirs = [];
+                            updateDisplay();
+                            isMoving = false;
+                            return;
+                        }
+                    }
+                }
+                cell.block = null;
+                robotPos = {row: row, col : col};
+                updateDisplay();
+                updateRobot();
+                setTimeout(moveStep, fastMode ? 50 : 300);
+            }
+
+            function prepareGridForWorker() {
+                const gridData = new Int8Array(ROWS * COLS);
+                const itemMap = new Int8Array(ROWS * COLS)
+                    .fill(-1);
+                let itemCounter = 0;
+                for (let r = 0; r < ROWS; r++) {
+                    for (let c = 0; c < COLS; c++) {
+                        const idx = r * COLS + c;
+                        const block = grid[r][c].block;
+                        if (!block) {
+                            gridData[idx] = 0;
+                            continue;
+                        }
+                        const type = block.dataset.type;
+                        if (type === 'key') {
+                            gridData[idx] = 1;
+                            itemMap[idx] = itemCounter++;
+                        } else if (type === 'hammer') {
+                            gridData[idx] = 2;
+                            itemMap[idx] = itemCounter++;
+                        } else if (type === 'obstacle') {
+                            gridData[idx] = 3;
+                            itemMap[idx] = itemCounter++;
+                        } else if (type === 'door') {
+                            gridData[idx] = 4;
+                        }
+                    }
+                }
+                return {
+                    gridData,
+                    itemMap
+                };
+            }
+
+            function autoSolve() {
+                isSolving = true;
+                const {gridData, itemMap} = prepareGridForWorker();
+                const overlay = document.getElementById('overlay');
+                
+                if (pathfindingWorker == null) {
+                    pathfindingWorker = new Worker('path_finding_worker.js');
+                    pathfindingWorker.onmessage = (e) => {
+                        const solution = e.data;
+                        if (solution) {
+                            pathDirs = solution;
+                            path = [];
+                            solution.reduce((pos, dir) => {
+                                const delta = {
+                                    up: [-1, 0],
+                                    down: [1, 0],
+                                    left: [0, -1],
+                                    right: [0, 1]
+                                } [dir];
+                                const r = pos.row + delta[0];
+                                const c = pos.col + delta[1];
+                                path.push({
+                                    row: r,
+                                    col: c
+                                });
+                                return {
+                                    row: r,
+                                    col: c
+                                };
+                            }, {
+                                ...robotPos
+                            });
+                            updateDisplay();
+                            updateRobot();
+                        } else {
+                            alert('No solution found');
+                        }
+                        pathfindingWorker.terminate();
+                        pathfindingWorker = null;
+                        isSolving = false;
+                        overlay.classList.remove("visible");
+                    };
+                }
+                overlay.classList.add("visible");
+                pathfindingWorker.postMessage({
+                    robotPos,
+                    totalKeys,
+                    gridData: Array.from(gridData),
+                    itemMap: Array.from(itemMap),
+                    ROWS,
+                    COLS
+                });
+            }
+
+            document.addEventListener('keydown', e => {
+                if (isMoving || isSolving) {
+                    return
+                };
+                switch (e.key) {
+                    case 'Enter':
+                        if (path.length) {
+                            isMoving = true;
+                            levelTurns++;
+                            moveStep();
+                        }
+                        break;
+                    case 'Backspace':
+                        path.pop();
+                        pathDirs.pop();
+                        updateDisplay();
+                        updateRobot();
+                        break;
+                    case 'n':
+                        level = 1;
+                        totalTurns = 0;
+                        initLevel();
+                        break;
+                    case 'r':
+                        initLevel();
+                        break;
+                    case 't':
+                        trainingMode = !trainingMode;
+                        break;
+                    case 'f':
+                        fastMode = !fastMode;
+                        break;
+                    case 'w':
+                        useWalls = !useWalls;
+                        break;
+                    case 'h':
+                        hammersCollected++;
+                        break;
+                    case 'a':
+                        autoSolve();
+                        break;
+                    case 'l':
+                        if (e.shiftKey) {
+                            level = Math.max(1, level - 1);
+                        } else {
+                            level++;
+                        }
+                        initLevel();
+                        break;
+                    default:
+                        if (keyMap[e.key]) {
+                            queueMove(keyMap[e.key]);
+                        }
+                        break;
+                }
+                updateDisplay();
+                updateRobot();
+            });
+
+            initLevel();
+        </script>
+    </body>
+</html>
